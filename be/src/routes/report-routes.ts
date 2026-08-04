@@ -1,12 +1,34 @@
 import { Hono } from "hono"
-import { eq, lte, sql } from "drizzle-orm"
+import { eq, lte, sql, gte } from "drizzle-orm"
 import { db } from "../db/index.js"
-import { categories, products, stockTxs } from "../db/schema.js"
+import { categories, products, stockTxs, stockTxDetails } from "../db/schema.js"
 import { authMiddleware, type Env } from "./auth.js"
 
 const reportRoutes = new Hono<Env>()
 
 reportRoutes.use("*", authMiddleware)
+
+const getStartDateFromPeriod = (period: string | undefined): Date | null => {
+  if (!period || period === "all") return null;
+  const now = new Date();
+  if (period === "today") {
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }
+  if (period === "week") {
+    const day = now.getDay();
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+    now.setDate(diff);
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }
+  if (period === "month") {
+    now.setDate(1);
+    now.setHours(0, 0, 0, 0);
+    return now;
+  }
+  return null;
+};
 
 reportRoutes.get("/summary", async (c) => {
   try {
@@ -66,13 +88,22 @@ reportRoutes.get("/low-stock", async (c) => {
 
 reportRoutes.get("/transactions-summary", async (c) => {
   try {
-    const summary = await db
+    const period = c.req.query("period")
+    const startDate = getStartDateFromPeriod(period)
+
+    // Base query
+    let query: any = db
       .select({
         type: stockTxs.type,
         count: sql<number>`count(*)`,
       })
       .from(stockTxs)
-      .groupBy(stockTxs.type)
+
+    if (startDate) {
+      query = query.where(gte(stockTxs.txDate, startDate))
+    }
+
+    const summary = await query.groupBy(stockTxs.type)
 
     return c.json({
       status: "success",
@@ -81,6 +112,42 @@ reportRoutes.get("/transactions-summary", async (c) => {
   } catch (error) {
     console.error("Transactions Summary Error:", error)
     return c.json({ status: "error", message: "Failed to fetch transactions summary" }, 500)
+  }
+})
+
+reportRoutes.get("/transactions-detail", async (c) => {
+  try {
+    const period = c.req.query("period")
+    const startDate = getStartDateFromPeriod(period)
+
+    let query: any = db
+      .select({
+        id: stockTxDetails.id,
+        txDate: stockTxs.txDate,
+        txCode: stockTxs.txCode,
+        type: stockTxs.type,
+        productName: products.name,
+        quantity: stockTxDetails.quantity,
+        unitPrice: stockTxDetails.unitPrice,
+      })
+      .from(stockTxDetails)
+      .leftJoin(stockTxs, eq(stockTxDetails.txId, stockTxs.id))
+      .leftJoin(products, eq(stockTxDetails.productId, products.id))
+
+    if (startDate) {
+      query = query.where(gte(stockTxs.txDate, startDate))
+    }
+
+    // Order by date descending
+    const details = await query.orderBy(sql`${stockTxs.txDate} desc`)
+
+    return c.json({
+      status: "success",
+      data: details,
+    })
+  } catch (error) {
+    console.error("Transactions Detail Error:", error)
+    return c.json({ status: "error", message: "Failed to fetch transactions detail" }, 500)
   }
 })
 
