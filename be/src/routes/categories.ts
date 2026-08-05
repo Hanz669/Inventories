@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "../db/index.js"
 import { categories, products } from "../db/schema.js"
-import { authMiddleware, handleValidation, type Env } from "./auth.js"
+import { authMiddleware, adminOnlyMiddleware, handleValidation, type Env } from "./auth.js"
 
 const categoriesRoute = new Hono<Env>()
 
@@ -30,8 +30,8 @@ categoriesRoute.get("/", async (c) => {
 
 categoriesRoute.get("/:id", async (c) => {
   try {
-    const id = Number(c.req.param("id"))
-    if (isNaN(id)) {
+    const id = c.req.param("id")
+    if (!id) {
       return c.json({ status: "error", message: "Invalid category ID" }, 400)
     }
 
@@ -47,12 +47,12 @@ categoriesRoute.get("/:id", async (c) => {
   }
 })
 
-categoriesRoute.post("/", zValidator("json", createCategorySchema, handleValidation), async (c) => {
+categoriesRoute.post("/", adminOnlyMiddleware, zValidator("json", createCategorySchema, handleValidation), async (c) => {
   try {
     const { name } = c.req.valid("json")
+    const newId = crypto.randomUUID()
 
-    const insertResult = await db.insert(categories).values({ name })
-    const newId = (insertResult[0] as any)?.insertId ?? (insertResult as any)?.insertId
+    await db.insert(categories).values({ id: newId, name })
 
     return c.json({ status: "success", message: "Category created successfully", data: { id: newId, name } }, 201)
   } catch (error) {
@@ -61,10 +61,10 @@ categoriesRoute.post("/", zValidator("json", createCategorySchema, handleValidat
   }
 })
 
-categoriesRoute.put("/:id", zValidator("json", updateCategorySchema, handleValidation), async (c) => {
+categoriesRoute.put("/:id", adminOnlyMiddleware, zValidator("json", updateCategorySchema, handleValidation), async (c) => {
   try {
-    const id = Number(c.req.param("id"))
-    if (isNaN(id)) {
+    const id = c.req.param("id")
+    if (!id) {
       return c.json({ status: "error", message: "Invalid category ID" }, 400)
     }
 
@@ -83,10 +83,10 @@ categoriesRoute.put("/:id", zValidator("json", updateCategorySchema, handleValid
   }
 })
 
-categoriesRoute.delete("/:id", async (c) => {
+categoriesRoute.delete("/:id", adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number(c.req.param("id"))
-    if (isNaN(id)) {
+    const id = c.req.param("id")
+    if (!id) {
       return c.json({ status: "error", message: "Invalid category ID" }, 400)
     }
 

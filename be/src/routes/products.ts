@@ -1,15 +1,15 @@
 import { Hono } from "hono"
 import { zValidator } from "@hono/zod-validator"
-import { eq, ne, and } from "drizzle-orm"
+import { eq, ne, and, like, or, sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "../db/index.js"
 import { categories, products, stockTxDetails } from "../db/schema.js"
-import { authMiddleware, handleValidation, type Env } from "./auth.js"
+import { authMiddleware, adminOnlyMiddleware, handleValidation, type Env } from "./auth.js"
 
 const productsRoute = new Hono<Env>()
 
 const productSchema = z.object({
-  categoryId: z.number().int().positive().nullable().optional(),
+  categoryId: z.string().nullable().optional(),
   sku: z.string().min(1, "SKU is required"),
   name: z.string().min(1, "Product name is required"),
   stock: z.coerce.number().int().nonnegative().optional(),
@@ -22,6 +22,13 @@ productsRoute.use("*", authMiddleware)
 
 productsRoute.get("/", async (c) => {
   try {
+    const page = Number(c.req.query("page")) || 1
+    const limit = Number(c.req.query("limit")) || 10
+    const search = c.req.query("search") || ""
+    const offset = (page - 1) * limit
+
+    const searchFilter = search ? or(like(products.name, `%${search}%`), like(products.sku, `%${search}%`)) : undefined
+
     const data = await db
       .select({
         id: products.id,
@@ -37,8 +44,27 @@ productsRoute.get("/", async (c) => {
       })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
+      .where(searchFilter)
+      .limit(limit)
+      .offset(offset)
 
-    return c.json({ status: "success", data })
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(products)
+      .where(searchFilter)
+
+    return c.json({ 
+      status: "success", 
+      data: {
+        items: data,
+        meta: {
+          total: Number(count),
+          page,
+          limit,
+          totalPages: Math.ceil(Number(count) / limit)
+        }
+      } 
+    })
   } catch (error) {
     console.error("Fetch Products Error:", error)
     return c.json({ status: "error", message: "Failed to fetch products" }, 500)
@@ -47,8 +73,8 @@ productsRoute.get("/", async (c) => {
 
 productsRoute.get("/:id", async (c) => {
   try {
-    const id = Number(c.req.param("id"))
-    if (isNaN(id)) {
+    const id = c.req.param("id")
+    if (!id) {
       return c.json({ status: "error", message: "Invalid product ID" }, 400)
     }
 
@@ -80,7 +106,7 @@ productsRoute.get("/:id", async (c) => {
   }
 })
 
-productsRoute.post("/", zValidator("json", productSchema, handleValidation), async (c) => {
+productsRoute.post("/", adminOnlyMiddleware, zValidator("json", productSchema, handleValidation), async (c) => {
   try {
     const body = c.req.valid("json")
     const { categoryId, sku, name, stock, minStock, buyPrice, sellPrice } = body
@@ -97,7 +123,10 @@ productsRoute.post("/", zValidator("json", productSchema, handleValidation), asy
       }
     }
 
-    const insertResult = await db.insert(products).values({
+    const newId = crypto.randomUUID()
+
+    await db.insert(products).values({
+      id: newId,
       categoryId: categoryId ?? null,
       sku,
       name,
@@ -107,8 +136,6 @@ productsRoute.post("/", zValidator("json", productSchema, handleValidation), asy
       sellPrice: String(sellPrice),
     })
 
-    const newId = (insertResult[0] as any)?.insertId ?? (insertResult as any)?.insertId
-
     return c.json({ status: "success", message: "Product created successfully", data: { id: newId, sku, name } }, 201)
   } catch (error) {
     console.error("Create Product Error:", error)
@@ -116,10 +143,10 @@ productsRoute.post("/", zValidator("json", productSchema, handleValidation), asy
   }
 })
 
-productsRoute.put("/:id", zValidator("json", productSchema, handleValidation), async (c) => {
+productsRoute.put("/:id", adminOnlyMiddleware, zValidator("json", productSchema, handleValidation), async (c) => {
   try {
-    const id = Number(c.req.param("id"))
-    if (isNaN(id)) {
+    const id = c.req.param("id")
+    if (!id) {
       return c.json({ status: "error", message: "Invalid product ID" }, 400)
     }
 
@@ -166,10 +193,10 @@ productsRoute.put("/:id", zValidator("json", productSchema, handleValidation), a
   }
 })
 
-productsRoute.delete("/:id", async (c) => {
+productsRoute.delete("/:id", adminOnlyMiddleware, async (c) => {
   try {
-    const id = Number(c.req.param("id"))
-    if (isNaN(id)) {
+    const id = c.req.param("id")
+    if (!id) {
       return c.json({ status: "error", message: "Invalid product ID" }, 400)
     }
 

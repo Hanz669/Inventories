@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { useTransactions } from "../../hooks/useTransactions";
@@ -10,6 +10,11 @@ import { Plus, ArrowDownRight, ArrowUpRight, Layers } from "lucide-react";
 
 export default function TransactionsPage() {
   const { transactions, isLoading, error } = useTransactions();
+  const [filterType, setFilterType] = useState<string>("ALL");
+
+  const filteredTransactions = transactions.filter((tx) => 
+    filterType === "ALL" ? true : tx.type === filterType
+  );
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString("id-ID", {
@@ -29,11 +34,23 @@ export default function TransactionsPage() {
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">Transactions</h1>
             <p className="text-gray-500">View history of stock movements (In, Out, Adjustments).</p>
           </div>
-          <Link href="/transactions/new">
-            <Button className="flex items-center">
-              <Plus className="mr-2 h-4 w-4" /> New Transaction
-            </Button>
-          </Link>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <select
+              className="flex h-10 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+            >
+              <option value="ALL">All Types</option>
+              <option value="IN">Stock In</option>
+              <option value="OUT">Stock Out</option>
+              <option value="ADJUSTMENT">Adjustment</option>
+            </select>
+            <Link href="/transactions/new">
+              <Button className="flex items-center">
+                <Plus className="mr-2 h-4 w-4" /> New Transaction
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -58,14 +75,14 @@ export default function TransactionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.length === 0 ? (
+                {filteredTransactions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center py-8 text-gray-500">
                       No transactions found.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  transactions.map((tx) => (
+                  filteredTransactions.map((tx) => (
                     <TableRow key={tx.id}>
                       <TableCell className="font-medium text-gray-900">{tx.txCode}</TableCell>
                       <TableCell className="text-gray-500">{formatDate(tx.txDate)}</TableCell>

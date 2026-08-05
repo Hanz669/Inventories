@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../hooks/useAuth";
+import { useToast } from "../../contexts/ToastContext";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { Package } from "lucide-react";
@@ -12,7 +13,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const { login, user, isLoading, error } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
+
+  useEffect(() => {
+    if (error) {
+      showToast(error, "error");
+    }
+  }, [error, showToast]);
 
   useEffect(() => {
     if (user && !isLoading) {
@@ -24,6 +32,7 @@ export default function LoginPage() {
     e.preventDefault();
     const success = await login({ email, password });
     if (success) {
+      showToast("Login successful! Welcome back.", "success");
       router.push("/dashboard");
     }
   };

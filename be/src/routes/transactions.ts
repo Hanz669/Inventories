@@ -9,13 +9,13 @@ import { authMiddleware, handleValidation, type Env } from "./auth.js"
 const transactionsRoute = new Hono<Env>()
 
 const transactionSchema = z.object({
-  userId: z.number().int().positive().optional(),
+  userId: z.string().optional(),
   txCode: z.string().min(1, "Transaction code is required").optional(),
   type: z.enum(["IN", "OUT", "ADJUSTMENT"]),
   notes: z.string().optional(),
   items: z.array(
     z.object({
-      productId: z.number().int().positive("Valid product ID is required"),
+      productId: z.string().min(1, "Valid product ID is required"),
       quantity: z.number().int().positive("Quantity must be greater than 0"),
       unitPrice: z.union([z.string(), z.number()]),
     }),
@@ -36,8 +36,8 @@ transactionsRoute.get("/", async (c) => {
 
 transactionsRoute.get("/:id", async (c) => {
   try {
-    const id = Number(c.req.param("id"))
-    if (isNaN(id)) {
+    const id = c.req.param("id")
+    if (!id) {
       return c.json({ status: "error", message: "Invalid transaction ID" }, 400)
     }
 
@@ -97,18 +97,14 @@ transactionsRoute.post("/", zValidator("json", transactionSchema, handleValidati
     }
 
     const result = await db.transaction(async (tx) => {
-      const insertTxHeader = await tx.insert(stockTxs).values({
+      const txId = crypto.randomUUID()
+      await tx.insert(stockTxs).values({
+        id: txId,
         userId: activeUserId,
         txCode,
         type,
         notes: notes ?? null,
       })
-
-      const txId = (insertTxHeader[0] as any)?.insertId ?? (insertTxHeader as any)?.insertId
-
-      if (!txId) {
-        throw new Error("Failed to generate transaction header ID")
-      }
 
       for (const item of items) {
         const [product] = await tx.select().from(products).where(eq(products.id, item.productId))
@@ -132,8 +128,10 @@ transactionsRoute.post("/", zValidator("json", transactionSchema, handleValidati
           nextStock = quantity
         }
 
+        const detailId = crypto.randomUUID()
         await tx.insert(stockTxDetails).values({
-          txId: Number(txId),
+          id: detailId,
+          txId,
           productId: item.productId,
           quantity,
           unitPrice,
@@ -142,7 +140,7 @@ transactionsRoute.post("/", zValidator("json", transactionSchema, handleValidati
         await tx.update(products).set({ stock: nextStock }).where(eq(products.id, item.productId))
       }
 
-      return { txId: Number(txId), txCode }
+      return { txId, txCode }
     })
 
     return c.json(

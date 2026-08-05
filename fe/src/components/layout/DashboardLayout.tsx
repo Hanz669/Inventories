@@ -44,14 +44,14 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden print:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex lg:flex-col ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:flex lg:flex-col print:hidden ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -66,7 +66,22 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
           {navItems.map((item) => {
+            const isRestricted = user.role === "STAFF" && (item.name === "Categories" || item.name === "Reports");
             const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            if (isRestricted) {
+              return (
+                <div
+                  key={item.name}
+                  className="group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg text-gray-400 opacity-50 cursor-not-allowed"
+                  title="Access restricted to Admin"
+                >
+                  <item.icon className="mr-3 flex-shrink-0 h-5 w-5 text-gray-400" />
+                  {item.name}
+                  <span className="ml-auto text-xs border border-gray-300 rounded px-1.5 py-0.5">Admin</span>
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={item.name}
@@ -110,9 +125,9 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible">
         {/* Mobile Header */}
-        <header className="lg:hidden flex items-center justify-between h-16 px-4 bg-white border-b border-gray-200">
+        <header className="lg:hidden flex items-center justify-between h-16 px-4 bg-white border-b border-gray-200 print:hidden">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-md"
@@ -123,8 +138,8 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
           <div className="w-8" /> {/* Spacer for centering */}
         </header>
 
-        <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-          <div className="mx-auto max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out">
+        <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 print:p-0 print:overflow-visible">
+          <div className="mx-auto max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out print:animate-none">
             {children}
           </div>
         </div>

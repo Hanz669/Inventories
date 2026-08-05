@@ -9,7 +9,7 @@ import { db } from "../db/index.js"
 import { users } from "../db/schema.js"
 
 export type JwtPayload = {
-  id: number
+  id: string
   name?: string
   email: string
   role: "ADMIN" | "STAFF"
@@ -104,16 +104,16 @@ auth.post("/register", zValidator("json", registerSchema, handleValidation), asy
       return c.json({ status: "error", message: "Email is already registered" }, 400)
     }
 
+    const newUserId = crypto.randomUUID()
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    const insertResult = await db.insert(users).values({
+    await db.insert(users).values({
+      id: newUserId,
       name,
       email,
       password: hashedPassword,
       role: role ?? "STAFF",
     })
-
-    const newUserId = (insertResult[0] as any)?.insertId ?? (insertResult as any)?.insertId
 
     return c.json(
       {

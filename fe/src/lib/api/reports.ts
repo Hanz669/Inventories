@@ -32,6 +32,7 @@ export interface TransactionDetail {
   productName: string;
   quantity: number;
   unitPrice: string | number;
+  userName?: string | null;
 }
 
 export const reportsApi = {
@@ -43,13 +44,25 @@ export const reportsApi = {
     return fetchClient<LowStockProduct[]>("/reports/low-stock");
   },
 
-  getTransactionsSummary: async (period?: string): Promise<TransactionSummary[]> => {
-    const query = period ? `?period=${period}` : "";
-    return fetchClient<TransactionSummary[]>(`/reports/transactions-summary${query}`);
+  getTransactionsSummary: async (period?: string, startDate?: string, endDate?: string): Promise<TransactionSummary[]> => {
+    let url = "/reports/transactions-summary";
+    const params = new URLSearchParams();
+    if (period) params.append("period", period);
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    return fetchClient<TransactionSummary[]>(url);
   },
 
-  getTransactionsDetail: async (period?: string): Promise<TransactionDetail[]> => {
-    const query = period ? `?period=${period}` : "";
-    return fetchClient<TransactionDetail[]>(`/reports/transactions-detail${query}`);
+  getTransactionsDetail: async (period?: string, startDate?: string, endDate?: string): Promise<TransactionDetail[]> => {
+    let url = "/reports/transactions-detail";
+    const params = new URLSearchParams();
+    if (period) params.append("period", period);
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    return fetchClient<TransactionDetail[]>(url);
   },
 };

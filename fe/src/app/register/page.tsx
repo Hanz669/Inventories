@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "../../hooks/useAuth";
+import { useToast } from "../../contexts/ToastContext";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { Package } from "lucide-react";
@@ -15,7 +16,14 @@ export default function RegisterPage() {
   const [role, setRole] = useState<"ADMIN" | "STAFF">("STAFF");
   
   const { register, user, isLoading, error } = useAuth();
+  const { showToast } = useToast();
   const router = useRouter();
+
+  useEffect(() => {
+    if (error) {
+      showToast(error, "error");
+    }
+  }, [error, showToast]);
 
   useEffect(() => {
     if (user && !isLoading) {
@@ -28,14 +36,17 @@ export default function RegisterPage() {
     const success = await register({ name, email, password, role });
     if (success) {
       // Registration doesn't auto-login in our backend, so redirect to login
-      alert("Registration successful! Please sign in.");
+      showToast("Registration successful! Please sign in.", "success");
       router.push("/login");
     }
   };
 
   if (isLoading && !error && !user) {
-    // If it's the initial loading, show spinner. 
-    // If it's loading because of the submit button, the button handles the spinner.
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
   return (

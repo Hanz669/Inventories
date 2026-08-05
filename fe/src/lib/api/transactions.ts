@@ -2,7 +2,7 @@ import { fetchClient } from "./client";
 import { StockTx } from "../../types";
 
 export interface TransactionItemPayload {
-  productId: number;
+  productId: string;
   quantity: number;
   unitPrice: number;
 }
@@ -18,7 +18,7 @@ export const transactionsApi = {
     return fetchClient<StockTx[]>("/transactions");
   },
 
-  getById: async (id: number): Promise<any> => { // Returns tx with items array
+  getById: async (id: string): Promise<any> => { // Returns tx with items array
     return fetchClient<any>(`/transactions/${id}`);
   },
 

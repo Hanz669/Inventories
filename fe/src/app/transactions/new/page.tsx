@@ -10,28 +10,32 @@ import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { TransactionItemPayload } from "../../../lib/api/transactions";
+import { useToast } from "../../../contexts/ToastContext";
+import { useConfirm } from "../../../contexts/ConfirmContext";
 
 export default function NewTransactionPage() {
   const router = useRouter();
   const { createTransaction, error: txError } = useTransactions();
   const { products, isLoading: isLoadingProducts } = useProducts();
+  const { showToast } = useToast();
+  const { confirm } = useConfirm();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [type, setType] = useState<"IN" | "OUT" | "ADJUSTMENT">("IN");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<TransactionItemPayload[]>([
-    { productId: 0, quantity: 1, unitPrice: 0 }
+    { productId: "", quantity: 1, unitPrice: 0 }
   ]);
 
   const handleAddItem = () => {
-    setItems([...items, { productId: 0, quantity: 1, unitPrice: 0 }]);
+    setItems([...items, { productId: "", quantity: 1, unitPrice: 0 }]);
   };
 
   const handleRemoveItem = (index: number) => {
     setItems(items.filter((_, i) => i !== index));
   };
 
-  const handleItemChange = (index: number, field: keyof TransactionItemPayload, value: number) => {
+  const handleItemChange = (index: number, field: keyof TransactionItemPayload, value: string | number) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     
@@ -63,7 +67,7 @@ export default function NewTransactionPage() {
     e.preventDefault();
     
     // Validation
-    if (items.some(item => item.productId === 0)) {
+    if (items.some(item => !item.productId)) {
       alert("Please select a product for all items.");
       return;
     }
@@ -71,6 +75,15 @@ export default function NewTransactionPage() {
       alert("Quantity must be greater than 0 for all items.");
       return;
     }
+
+    const isConfirmed = await confirm({
+      title: "Confirm Transaction",
+      message: "Are you sure you want to submit this transaction? Stock quantities will be updated accordingly.",
+      confirmLabel: "Submit Transaction",
+      cancelLabel: "Cancel",
+    });
+
+    if (!isConfirmed) return;
 
     setIsSubmitting(true);
     const success = await createTransaction({
@@ -80,6 +93,7 @@ export default function NewTransactionPage() {
     });
     
     if (success) {
+      showToast("Transaction successfully recorded", "success");
       router.push("/transactions");
     } else {
       setIsSubmitting(false);
@@ -149,11 +163,11 @@ export default function NewTransactionPage() {
                   <select
                     className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     value={item.productId}
-                    onChange={(e) => handleItemChange(index, "productId", Number(e.target.value))}
+                    onChange={(e) => handleItemChange(index, "productId", e.target.value)}
                     required
                     disabled={isLoadingProducts}
                   >
-                    <option value={0} disabled>Select product...</option>
+                    <option value="" disabled>Select product...</option>
                     {products.map(p => (
                       <option key={p.id} value={p.id}>
                         {p.name} (Stock: {p.stock})

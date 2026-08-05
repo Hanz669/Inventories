@@ -35,7 +35,7 @@ export const useCategories = () => {
     }
   };
 
-  const updateCategory = async (id: number, name: string) => {
+  const updateCategory = async (id: string, name: string) => {
     try {
       await categoriesApi.update(id, { name });
       await fetchCategories();
@@ -46,7 +46,7 @@ export const useCategories = () => {
     }
   };
 
-  const deleteCategory = async (id: number) => {
+  const deleteCategory = async (id: string) => {
     try {
       await categoriesApi.delete(id);
       await fetchCategories();

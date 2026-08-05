@@ -1,5 +1,5 @@
 export interface User {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: "ADMIN" | "STAFF";
@@ -7,13 +7,13 @@ export interface User {
 }
 
 export interface Category {
-  id: number;
+  id: string;
   name: string;
 }
 
 export interface Product {
-  id: number;
-  categoryId: number;
+  id: string;
+  categoryId: string | null;
   sku: string;
   name: string;
   stock: number;
@@ -25,8 +25,8 @@ export interface Product {
 }
 
 export interface StockTx {
-  id: number;
-  userId: number;
+  id: string;
+  userId: string | null;
   txCode: string;
   type: "IN" | "OUT" | "ADJUSTMENT";
   notes?: string | null;
@@ -35,9 +35,9 @@ export interface StockTx {
 }
 
 export interface StockTxDetail {
-  id: number;
-  txId: number;
-  productId: number;
+  id: string;
+  txId: string;
+  productId: string;
   quantity: number;
   unitPrice: string | number;
   product?: Product; // Optional if joined

@@ -1,33 +1,69 @@
 import { Hono } from "hono"
-import { eq, lte, sql, gte } from "drizzle-orm"
+import { eq, lte, sql, gte, and } from "drizzle-orm"
 import { db } from "../db/index.js"
-import { categories, products, stockTxs, stockTxDetails } from "../db/schema.js"
-import { authMiddleware, type Env } from "./auth.js"
+import { categories, products, stockTxs, stockTxDetails, users } from "../db/schema.js"
+import { authMiddleware, adminOnlyMiddleware, type Env } from "./auth.js"
 
 const reportRoutes = new Hono<Env>()
 
 reportRoutes.use("*", authMiddleware)
 
-const getStartDateFromPeriod = (period: string | undefined): Date | null => {
-  if (!period || period === "all") return null;
+const getDateRangeFromPeriod = (period: string | undefined, customStart?: string, customEnd?: string): { startDate: Date | null, endDate: Date | null } => {
+  if (period === "custom") {
+    let startDate = null;
+    let endDate = null;
+    if (customStart) {
+      startDate = new Date(customStart);
+      startDate.setHours(0, 0, 0, 0);
+    }
+    if (customEnd) {
+      endDate = new Date(customEnd);
+      endDate.setHours(23, 59, 59, 999);
+    }
+    return { startDate, endDate };
+  }
+
+  if (!period || period === "all") return { startDate: null, endDate: null };
   const now = new Date();
+  const start = new Date(now);
+  const end = new Date(now);
+  
   if (period === "today") {
-    now.setHours(0, 0, 0, 0);
-    return now;
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { startDate: start, endDate: end };
+  }
+  if (period === "yesterday") {
+    start.setDate(start.getDate() - 1);
+    start.setHours(0, 0, 0, 0);
+    end.setDate(end.getDate() - 1);
+    end.setHours(23, 59, 59, 999);
+    return { startDate: start, endDate: end };
   }
   if (period === "week") {
-    const day = now.getDay();
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-    now.setDate(diff);
-    now.setHours(0, 0, 0, 0);
-    return now;
+    const day = start.getDay();
+    const diff = start.getDate() - day + (day === 0 ? -6 : 1);
+    start.setDate(diff);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { startDate: start, endDate: end };
   }
-  if (period === "month") {
-    now.setDate(1);
-    now.setHours(0, 0, 0, 0);
-    return now;
+  if (period === "this_month" || period === "month") {
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { startDate: start, endDate: end };
   }
-  return null;
+  if (period === "last_month") {
+    start.setMonth(start.getMonth() - 1);
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    
+    end.setDate(0); // last day of previous month
+    end.setHours(23, 59, 59, 999);
+    return { startDate: start, endDate: end };
+  }
+  return { startDate: null, endDate: null };
 };
 
 reportRoutes.get("/summary", async (c) => {
@@ -89,7 +125,9 @@ reportRoutes.get("/low-stock", async (c) => {
 reportRoutes.get("/transactions-summary", async (c) => {
   try {
     const period = c.req.query("period")
-    const startDate = getStartDateFromPeriod(period)
+    const customStart = c.req.query("startDate")
+    const customEnd = c.req.query("endDate")
+    const { startDate, endDate } = getDateRangeFromPeriod(period, customStart, customEnd)
 
     // Base query
     let query: any = db
@@ -99,7 +137,9 @@ reportRoutes.get("/transactions-summary", async (c) => {
       })
       .from(stockTxs)
 
-    if (startDate) {
+    if (startDate && endDate) {
+      query = query.where(and(gte(stockTxs.txDate, startDate), lte(stockTxs.txDate, endDate)))
+    } else if (startDate) {
       query = query.where(gte(stockTxs.txDate, startDate))
     }
 
@@ -118,7 +158,9 @@ reportRoutes.get("/transactions-summary", async (c) => {
 reportRoutes.get("/transactions-detail", async (c) => {
   try {
     const period = c.req.query("period")
-    const startDate = getStartDateFromPeriod(period)
+    const customStart = c.req.query("startDate")
+    const customEnd = c.req.query("endDate")
+    const { startDate, endDate } = getDateRangeFromPeriod(period, customStart, customEnd)
 
     let query: any = db
       .select({
@@ -129,12 +171,16 @@ reportRoutes.get("/transactions-detail", async (c) => {
         productName: products.name,
         quantity: stockTxDetails.quantity,
         unitPrice: stockTxDetails.unitPrice,
+        userName: users.name,
       })
       .from(stockTxDetails)
       .leftJoin(stockTxs, eq(stockTxDetails.txId, stockTxs.id))
       .leftJoin(products, eq(stockTxDetails.productId, products.id))
+      .leftJoin(users, eq(stockTxs.userId, users.id))
 
-    if (startDate) {
+    if (startDate && endDate) {
+      query = query.where(and(gte(stockTxs.txDate, startDate), lte(stockTxs.txDate, endDate)))
+    } else if (startDate) {
       query = query.where(gte(stockTxs.txDate, startDate))
     }
 

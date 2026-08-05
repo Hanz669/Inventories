@@ -2,17 +2,23 @@
 
 import React, { useState } from "react";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
+import { useAuth } from "../../hooks/useAuth";
 import { useCategories } from "../../hooks/useCategories";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/Table";
 import { Button } from "../../components/ui/Button";
 import { Plus, Edit2, Trash2 } from "lucide-react";
 import { Input } from "../../components/ui/Input";
+import { useToast } from "../../contexts/ToastContext";
+import { useConfirm } from "../../contexts/ConfirmContext";
 
 export default function CategoriesPage() {
+  const { user } = useAuth();
   const { categories, isLoading, error, createCategory, updateCategory, deleteCategory } = useCategories();
+  const { showToast } = useToast();
+  const { confirm } = useConfirm();
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [categoryName, setCategoryName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -22,7 +28,7 @@ export default function CategoriesPage() {
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (id: number, currentName: string) => {
+  const handleOpenEdit = (id: string, currentName: string) => {
     setEditingId(id);
     setCategoryName(currentName);
     setIsModalOpen(true);
@@ -35,8 +41,10 @@ export default function CategoriesPage() {
     
     if (editingId) {
       success = await updateCategory(editingId, categoryName);
+      if (success) showToast("Category updated successfully", "success");
     } else {
       success = await createCategory(categoryName);
+      if (success) showToast("Category created successfully", "success");
     }
 
     setIsSubmitting(false);
@@ -45,11 +53,35 @@ export default function CategoriesPage() {
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete category "${name}"?`)) {
-      await deleteCategory(id);
+  const handleDelete = async (id: string, name: string) => {
+    const isConfirmed = await confirm({
+      title: "Delete Category",
+      message: `Are you sure you want to delete category "${name}"? This action cannot be undone.`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+
+    if (isConfirmed) {
+      const success = await deleteCategory(id);
+      if (success) {
+        showToast("Category deleted successfully", "success");
+      }
     }
   };
+
+  if (user?.role === "STAFF") {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center h-[70vh] space-y-4">
+          <div className="text-6xl">🚫</div>
+          <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
+          <p className="text-gray-500 text-center max-w-md">
+            You do not have permission to view this page. Only administrators can manage categories.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -79,7 +111,7 @@ export default function CategoriesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-16">ID</TableHead>
+                  <TableHead className="w-16">No</TableHead>
                   <TableHead>Category Name</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -92,9 +124,9 @@ export default function CategoriesPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  categories.map((cat) => (
+                  categories.map((cat, index) => (
                     <TableRow key={cat.id}>
-                      <TableCell className="font-medium text-gray-500">{cat.id}</TableCell>
+                      <TableCell className="font-medium text-gray-500">{index + 1}</TableCell>
                       <TableCell>
                         <span className="font-medium text-gray-900">{cat.name}</span>
                       </TableCell>

@@ -7,12 +7,15 @@ export const useProducts = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchProducts = useCallback(async () => {
+  const [meta, setMeta] = useState<any>(null);
+
+  const fetchProducts = useCallback(async (params?: { page?: number; limit?: number; search?: string }) => {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await productsApi.getAll();
-      setProducts(data);
+      const data = await productsApi.getAll(params);
+      setProducts(data.items);
+      setMeta(data.meta);
     } catch (err: any) {
       setError(err.message || "Failed to fetch products");
     } finally {
@@ -35,7 +38,7 @@ export const useProducts = () => {
     }
   };
 
-  const updateProduct = async (id: number, data: Partial<Product>) => {
+  const updateProduct = async (id: string, data: Partial<Product>) => {
     try {
       await productsApi.update(id, data);
       await fetchProducts();
@@ -46,7 +49,7 @@ export const useProducts = () => {
     }
   };
 
-  const deleteProduct = async (id: number) => {
+  const deleteProduct = async (id: string) => {
     try {
       await productsApi.delete(id);
       await fetchProducts();
@@ -59,6 +62,7 @@ export const useProducts = () => {
 
   return { 
     products, 
+    meta,
     isLoading, 
     error, 
     refetch: fetchProducts,

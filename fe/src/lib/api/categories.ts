@@ -6,7 +6,7 @@ export const categoriesApi = {
     return fetchClient<Category[]>("/categories");
   },
 
-  getById: async (id: number): Promise<Category> => {
+  getById: async (id: string): Promise<Category> => {
     return fetchClient<Category>(`/categories/${id}`);
   },
 
@@ -14,14 +14,14 @@ export const categoriesApi = {
     return fetchClient<Category>("/categories", { data });
   },
 
-  update: async (id: number, data: { name: string }): Promise<Category> => {
+  update: async (id: string, data: { name: string }): Promise<Category> => {
     return fetchClient<Category>(`/categories/${id}`, {
       method: "PUT",
       data,
     });
   },
 
-  delete: async (id: number): Promise<void> => {
+  delete: async (id: string): Promise<void> => {
     return fetchClient<void>(`/categories/${id}`, { method: "DELETE" });
   },
 };

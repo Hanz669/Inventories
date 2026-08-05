@@ -2,28 +2,46 @@
 
 import React, { useState } from "react";
 import { DashboardLayout } from "../../components/layout/DashboardLayout";
+import { useAuth } from "../../hooks/useAuth";
 import { useProducts } from "../../hooks/useProducts";
 import { useCategories } from "../../hooks/useCategories";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/Table";
 import { Button } from "../../components/ui/Button";
-import { Plus, Edit2, Trash2 } from "lucide-react";
+import { Plus, Edit2, Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "../../components/ui/Input";
 import { formatCurrency } from "../../utils/format";
 import { Product } from "../../types";
+import { useToast } from "../../contexts/ToastContext";
+import { useConfirm } from "../../contexts/ConfirmContext";
 
 export default function ProductsPage() {
-  const { products, isLoading, error, createProduct, updateProduct, deleteProduct } = useProducts();
+  const { products, meta, isLoading, error, createProduct, updateProduct, deleteProduct, refetch } = useProducts();
   const { categories, isLoading: isCategoriesLoading } = useCategories();
+  const { showToast } = useToast();
+  const { confirm } = useConfirm();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const limit = 10;
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      refetch({ page, limit, search: searchQuery });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [page, searchQuery, refetch]);
   
   // Form State
   const [formData, setFormData] = useState<Partial<Product>>({
     sku: "",
     name: "",
-    categoryId: 0,
+    categoryId: "",
     stock: 0,
     minStock: 0,
     buyPrice: 0,
@@ -35,7 +53,7 @@ export default function ProductsPage() {
     setFormData({
       sku: `PRD-${Math.floor(Math.random() * 10000)}`,
       name: "",
-      categoryId: categories.length > 0 ? categories[0].id : 0,
+      categoryId: categories.length > 0 ? categories[0].id : "",
       stock: 0,
       minStock: 5,
       buyPrice: 0,
@@ -49,7 +67,7 @@ export default function ProductsPage() {
     setFormData({
       sku: product.sku,
       name: product.name,
-      categoryId: product.categoryId,
+      categoryId: product.categoryId ?? "",
       stock: product.stock,
       minStock: product.minStock,
       buyPrice: product.buyPrice,
@@ -63,10 +81,9 @@ export default function ProductsPage() {
     setIsSubmitting(true);
     let success = false;
     
-    // Convert strings to numbers for API
     const payload = {
       ...formData,
-      categoryId: Number(formData.categoryId),
+      categoryId: formData.categoryId || null,
       stock: Number(formData.stock),
       minStock: Number(formData.minStock),
       buyPrice: Number(formData.buyPrice),
@@ -75,8 +92,10 @@ export default function ProductsPage() {
 
     if (editingId) {
       success = await updateProduct(editingId, payload);
+      if (success) showToast("Product updated successfully", "success");
     } else {
       success = await createProduct(payload);
+      if (success) showToast("Product created successfully", "success");
     }
 
     setIsSubmitting(false);
@@ -85,9 +104,19 @@ export default function ProductsPage() {
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
-    if (window.confirm(`Are you sure you want to delete product "${name}"?`)) {
-      await deleteProduct(id);
+  const handleDelete = async (id: string, name: string) => {
+    const isConfirmed = await confirm({
+      title: "Delete Product",
+      message: `Are you sure you want to delete product "${name}"? This action cannot be undone.`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+
+    if (isConfirmed) {
+      const success = await deleteProduct(id);
+      if (success) {
+        showToast("Product deleted successfully", "success");
+      }
     }
   };
 
@@ -99,9 +128,26 @@ export default function ProductsPage() {
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">Products</h1>
             <p className="text-gray-500">Manage your product catalog and view current stock levels.</p>
           </div>
-          <Button className="flex items-center" onClick={handleOpenCreate} disabled={isCategoriesLoading}>
-            <Plus className="mr-2 h-4 w-4" /> Add Product
-          </Button>
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                className="w-full pl-9 h-10 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            {isAdmin && (
+              <Button className="flex items-center w-full sm:w-auto" onClick={handleOpenCreate} disabled={isCategoriesLoading}>
+                <Plus className="mr-2 h-4 w-4" /> Add Product
+              </Button>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -119,6 +165,7 @@ export default function ProductsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-16">No</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>Product Name</TableHead>
                   <TableHead>Price</TableHead>
@@ -129,13 +176,16 @@ export default function ProductsPage() {
               <TableBody>
                 {products.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                       No products found. Start by adding one.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  products.map((product) => (
+                  products.map((product, index) => (
                     <TableRow key={product.id}>
+                      <TableCell className="font-medium text-gray-500">
+                        {((meta?.page || 1) - 1) * limit + index + 1}
+                      </TableCell>
                       <TableCell className="font-medium text-gray-900">{product.sku}</TableCell>
                       <TableCell>
                         <span className="font-medium text-gray-900">{product.name}</span>
@@ -149,28 +199,60 @@ export default function ProductsPage() {
                         </span>
                       </TableCell>
                       <TableCell className="text-right space-x-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleOpenEdit(product)}
-                        >
-                          <Edit2 className="h-4 w-4 text-blue-600" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleDelete(product.id, product.name)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
+                        {isAdmin ? (
+                          <>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              onClick={() => handleOpenEdit(product)}
+                            >
+                              <Edit2 className="h-4 w-4 text-blue-600" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              onClick={() => handleDelete(product.id, product.name)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic px-2">Read Only</span>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
                 )}
               </TableBody>
             </Table>
+          )}
+          
+          {meta && meta.totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="text-sm text-gray-500">
+                Showing <span className="font-medium">{((meta.page - 1) * limit) + 1}</span> to <span className="font-medium">{Math.min(meta.page * limit, meta.total)}</span> of <span className="font-medium">{meta.total}</span> results
+              </div>
+              <div className="flex space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Prev
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setPage(p => Math.min(meta.totalPages, p + 1))}
+                  disabled={page >= meta.totalPages}
+                >
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -214,11 +296,11 @@ export default function ProductsPage() {
                   <select
                     id="categoryId"
                     className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    value={formData.categoryId}
-                    onChange={(e) => setFormData({ ...formData, categoryId: Number(e.target.value) })}
+                    value={formData.categoryId ?? ""}
+                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                     required
                   >
-                    <option value={0} disabled>Select a category</option>
+                    <option value="" disabled>Select a category</option>
                     {categories.map((cat) => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
